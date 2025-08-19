@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini-Word</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin:0; padding:0; }
+    #toolbar { background:#f0f0f0; padding:5px; position:sticky; top:0; display:flex; flex-wrap:wrap; gap:4px; }
+    #editor { min-height:80vh; border:1px solid #ccc; padding:10px; margin:0; outline:none; overflow:auto; }
+    select, button, input[type=color] { margin-right:5px; }
+    #status { font-size:12px; color:#555; margin-left:auto; }
+    #findReplacePanel { display:none; background:#fff0f0; padding:5px; border:1px solid #ccc; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.4.1/html-docx.js"></script>
+</head>
+<body>
+  <div id="toolbar">
+    <select onchange="format('fontName',this.value)">
+      <option value="Arial">Arial</option>
+      <option value="Times New Roman">Times New Roman</option>
+      <option value="Courier New">Courier New</option>
+    </select>
+    <select onchange="format('fontSize',this.value)">
+      <option value="1">10px</option>
+      <option value="2">13px</option>
+      <option value="3" selected>16px</option>
+      <option value="4">18px</option>
+      <option value="5">24px</option>
+      <option value="6">32px</option>
+      <option value="7">48px</option>
+    </select>
+    <button onclick="format('bold')"><b>B</b></button>
+    <button onclick="format('italic')"><i>I</i></button>
+    <button onclick="format('underline')"><u>U</u></button>
+    <button onclick="format('strikeThrough')"><s>S</s></button>
+    <input type="color" onchange="format('foreColor',this.value)">
+    <input type="color" onchange="format('hiliteColor',this.value)">
+    <button onclick="format('insertUnorderedList')">• List</button>
+    <button onclick="format('insertOrderedList')">1. List</button>
+    <button onclick="format('justifyLeft')">⯇</button>
+    <button onclick="format('justifyCenter')">≡</button>
+    <button onclick="format('justifyRight')">⯈</button>
+    <button onclick="undoEdit()">Undo</button>
+    <button onclick="redoEdit()">Redo</button>
+    <button onclick="insertImage()">Image</button>
+    <button onclick="insertTable()">Table</button>
+    <button onclick="zoom(-0.1)">- Zoom</button>
+    <button onclick="zoom(0.1)">+ Zoom</button>
+    <button onclick="toggleFindReplace()">Find/Replace</button>
+    <button onclick="toggleAutosave()">Autosave</button>
+    <button onclick="toggleSpellcheck()">Spellcheck</button>
+    <button onclick="wordCount()">Count</button>
+    <button onclick="printDoc()">Print/PDF</button>
+    <input type="file" id="openFile" style="display:none" accept=".docx,.txt,.html">
+    <button onclick="document.getElementById('openFile').click()">Open</button>
+    <button onclick="saveDoc('docx')">Save DOCX</button>
+    <button onclick="saveDoc('html')">Save HTML</button>
+    <button onclick="saveDoc('txt')">Save TXT</button>
+    <span id="status"></span>
+  </div>
+
+  <div id="findReplacePanel">
+    Find: <input type="text" id="findText">
+    Replace: <input type="text" id="replaceText">
+    <button onclick="findNext()">Find Next</button>
+    <button onclick="replace()">Replace</button>
+    <button onclick="replaceAll()">Replace All</button>
+  </div>
+
+  <div id="editor" contenteditable="true" spellcheck="true"></div>
+
+<script>
+  let zoomLevel=1, autosaveEnabled=false, autosaveTimer;
+
+  function format(cmd,value=null){ document.execCommand(cmd,false,value); }
+  function undoEdit(){ document.execCommand('undo'); }
+  function redoEdit(){ document.execCommand('redo'); }
+
+  function insertImage(){
+    let input=document.createElement('input'); input.type='file'; input.accept='image/*';
+    input.onchange=e=>{
+      let file=e.target.files[0]; let reader=new FileReader();
+      reader.onload=()=>{ format('insertImage',reader.result); };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  }
+
+  function insertTable(){
+    let r=prompt('Rows?'); let c=prompt('Cols?');
+    if(r&&c){
+      let html='<table border="1">';
+      for(let i=0;i<r;i++){ html+='<tr>'; for(let j=0;j<c;j++){ html+='<td>&nbsp;</td>'; } html+='</tr>'; }
+      html+='</table>';
+      document.execCommand('insertHTML',false,html);
+    }
+  }
+
+  function zoom(f){ zoomLevel+=f; if(zoomLevel<0.2) zoomLevel=0.2; document.getElementById('editor').style.transform='scale('+zoomLevel+')'; document.getElementById('editor').style.transformOrigin='0 0'; }
+
+  function toggleFindReplace(){
+    let p=document.getElementById('findReplacePanel'); p.style.display=(p.style.display=='block'?'none':'block');
+  }
+
+  function findNext(){
+    let text=document.getElementById('findText').value; if(!text) return;
+    let sel=window.getSelection(); let range=window.find(text,false,false,true,false,false,false);
+  }
+  function replace(){
+    let f=document.getElementById('findText').value, r=document.getElementById('replaceText').value;
+    if(document.getSelection().toString()==f){ document.execCommand('insertText',false,r); findNext(); }
+  }
+  function replaceAll(){
+    let f=document.getElementById('findText').value, r=document.getElementById('replaceText').value;
+    document.getElementById('editor').innerHTML=document.getElementById('editor').innerHTML.split(f).join(r);
+  }
+
+  function toggleAutosave(){
+    autosaveEnabled=!autosaveEnabled;
+    if(autosaveEnabled){ autosaveTimer=setInterval(()=>localStorage.setItem('miniWordAutosave',document.getElementById('editor').innerHTML),3000); flashStatus('Autosave ON'); }
+    else { clearInterval(autosaveTimer); flashStatus('Autosave OFF'); }
+  }
+  function toggleSpellcheck(){
+    let e=document.getElementById('editor'); e.spellcheck=!e.spellcheck; flashStatus('Spellcheck '+(e.spellcheck?'ON':'OFF'));
+  }
+
+  function wordCount(){
+    let text=document.getElementById('editor').innerText.trim();
+    let words=text?text.split(/\s+/).length:0;
+    let chars=text.length;
+    alert('Words: '+words+'\nCharacters: '+chars);
+  }
+
+  function printDoc(){
+    let w=window.open('','PRINT','height=600,width=800');
+    w.document.write('<html><head><title>Print</title></head><body>'+document.getElementById('editor').innerHTML+'</body></html>');
+    w.document.close(); w.focus(); w.print(); w.close();
+  }
+
+  document.getElementById('openFile').addEventListener('change',function(){
+    let file=this.files[0]; let reader=new FileReader();
+    if(file.name.endsWith('.txt')){ reader.onload=e=>document.getElementById('editor').innerText=e.target.result; reader.readAsText(file); }
+    else if(file.name.endsWith('.html')){ reader.onload=e=>document.getElementById('editor').innerHTML=e.target.result; reader.readAsText(file); }
+    else if(file.name.endsWith('.docx')){ reader.onload=e=>mammoth.extractRawText({arrayBuffer:e.target.result}).then(res=>document.getElementById('editor').innerText=res.value); reader.readAsArrayBuffer(file); }
+  });
+
+  function saveDoc(type){
+    let content=document.getElementById('editor').innerHTML;
+    if(type=='html'){ let blob=new Blob([content],{type:'text/html'}); saveAs(blob,'document.html'); }
+    else if(type=='txt'){ let blob=new Blob([document.getElementById('editor').innerText],{type:'text/plain'}); saveAs(blob,'document.txt'); }
+    else if(type=='docx'){ let converted=htmlDocx.asBlob(content); saveAs(converted,'document.docx'); }
+  }
+
+  function flashStatus(msg){ let s=document.getElementById('status'); s.innerText=msg; setTimeout(()=>s.innerText='',2000); }
+
+  // restore autosave
+  window.onload=()=>{ let saved=localStorage.getItem('miniWordAutosave'); if(saved&&confirm('Restore autosaved content?')) document.getElementById('editor').innerHTML=saved; };
+
+  // keyboard shortcuts
+  document.addEventListener('keydown',function(e){
+    if((e.ctrlKey||e.metaKey)&&e.key==='s'){ e.preventDefault(); saveDoc('html'); }
+    if((e.ctrlKey||e.metaKey)&&e.key==='o'){ e.preventDefault(); document.getElementById('openFile').click(); }
+    if((e.ctrlKey||e.metaKey)&&e.key==='f'){ e.preventDefault(); toggleFindReplace(); }
+  });
+</script>
+</body>
+</html>
