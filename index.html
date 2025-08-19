@@ -1,169 +1,353 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Mini-Word</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Mini Word — Offline-ready</title>
   <style>
-    body { font-family: Arial, sans-serif; margin:0; padding:0; }
-    #toolbar { background:#f0f0f0; padding:5px; position:sticky; top:0; display:flex; flex-wrap:wrap; gap:4px; }
-    #editor { min-height:80vh; border:1px solid #ccc; padding:10px; margin:0; outline:none; overflow:auto; }
-    select, button, input[type=color] { margin-right:5px; }
-    #status { font-size:12px; color:#555; margin-left:auto; }
-    #findReplacePanel { display:none; background:#fff0f0; padding:5px; border:1px solid #ccc; }
+    :root{--toolbar-bg:#f3f4f6;--btn-bg:#fff;--accent:#2563eb}
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;background:#fafafa;color:#111}
+    header{padding:10px 12px;background:linear-gradient(180deg,#fff,#f7f7fb);border-bottom:1px solid #e6e6e9}
+    h1{margin:0;font-size:18px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;padding:10px;border-radius:8px;background:var(--toolbar-bg);align-items:center}
+    .toolbar select,.toolbar input[type=color],.toolbar button{padding:8px;border-radius:8px;border:1px solid #ddd;background:var(--btn-bg);font-size:15px}
+    .toolbar button{min-width:40px}
+    .toolbar .small{font-size:13px}
+    #editor{min-height:60vh;border:1px solid #ddd;padding:14px;margin:12px;border-radius:8px;background:white;overflow:auto;box-sizing:border-box}
+    .file-controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+    .status{font-size:13px;color:#666}
+    .find-replace{display:none;position:fixed;right:16px;top:80px;background:white;padding:10px;border:1px solid #ddd;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.08);z-index:40}
+    footer{padding:10px;color:#666;font-size:13px}
+    @media(max-width:720px){
+      .toolbar{position:fixed;left:0;right:0;bottom:0;padding:6px;gap:6px;z-index:40;border-top:1px solid #e6e6e9}
+      header{padding-bottom:56px}
+      #editor{margin:12px 12px 80px 12px}
+      .file-controls{margin-left:0}
+      .toolbar select,.toolbar button,.toolbar input[type=color]{padding:10px;font-size:16px}
+    }
+    button:focus,select:focus,input:focus{outline:2px solid rgba(37,99,235,0.18)}
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html-docx-js/0.4.1/html-docx.js"></script>
 </head>
 <body>
-  <div id="toolbar">
-    <select onchange="format('fontName',this.value)">
-      <option value="Arial">Arial</option>
-      <option value="Times New Roman">Times New Roman</option>
-      <option value="Courier New">Courier New</option>
-    </select>
-    <select onchange="format('fontSize',this.value)">
-      <option value="1">10px</option>
-      <option value="2">13px</option>
-      <option value="3" selected>16px</option>
-      <option value="4">18px</option>
-      <option value="5">24px</option>
-      <option value="6">32px</option>
-      <option value="7">48px</option>
-    </select>
-    <button onclick="format('bold')"><b>B</b></button>
-    <button onclick="format('italic')"><i>I</i></button>
-    <button onclick="format('underline')"><u>U</u></button>
-    <button onclick="format('strikeThrough')"><s>S</s></button>
-    <input type="color" onchange="format('foreColor',this.value)">
-    <input type="color" onchange="format('hiliteColor',this.value)">
-    <button onclick="format('insertUnorderedList')">• List</button>
-    <button onclick="format('insertOrderedList')">1. List</button>
-    <button onclick="format('justifyLeft')">⯇</button>
-    <button onclick="format('justifyCenter')">≡</button>
-    <button onclick="format('justifyRight')">⯈</button>
-    <button onclick="undoEdit()">Undo</button>
-    <button onclick="redoEdit()">Redo</button>
-    <button onclick="insertImage()">Image</button>
-    <button onclick="insertTable()">Table</button>
-    <button onclick="zoom(-0.1)">- Zoom</button>
-    <button onclick="zoom(0.1)">+ Zoom</button>
-    <button onclick="toggleFindReplace()">Find/Replace</button>
-    <button onclick="toggleAutosave()">Autosave</button>
-    <button onclick="toggleSpellcheck()">Spellcheck</button>
-    <button onclick="wordCount()">Count</button>
-    <button onclick="printDoc()">Print/PDF</button>
-    <input type="file" id="openFile" style="display:none" accept=".docx,.txt,.html">
-    <button onclick="document.getElementById('openFile').click()">Open</button>
-    <button onclick="saveDoc('docx')">Save DOCX</button>
-    <button onclick="saveDoc('html')">Save HTML</button>
-    <button onclick="saveDoc('txt')">Save TXT</button>
-    <span id="status"></span>
+  <header>
+    <h1>Mini Word — Offline-ready</h1>
+
+    <div class="toolbar" role="toolbar" aria-label="Formatting toolbar">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="fontFamily" title="Font family">
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Verdana">Verdana</option>
+        </select>
+
+        <select id="fontSize" title="Font size">
+          <option value="12px">12</option>
+          <option value="14px" selected>14</option>
+          <option value="16px">16</option>
+          <option value="18px">18</option>
+          <option value="24px">24</option>
+          <option value="32px">32</option>
+        </select>
+
+        <button id="boldBtn" title="Bold"><b>B</b></button>
+        <button id="italicBtn" title="Italic"><i>I</i></button>
+        <button id="underlineBtn" title="Underline"><u>U</u></button>
+        <button id="strikeBtn" title="Strikethrough"><s>S</s></button>
+
+        <input id="textColor" type="color" title="Text color" value="#000000">
+        <input id="highlightColor" type="color" title="Highlight color" value="#fff176">
+
+        <button id="olBtn" title="Ordered list">1.</button>
+        <button id="ulBtn" title="Unordered list">•</button>
+        <button id="leftBtn" title="Align left">L</button>
+        <button id="centerBtn" title="Center">C</button>
+        <button id="rightBtn" title="Align right">R</button>
+
+        <button id="undoBtn" title="Undo">↶</button>
+        <button id="redoBtn" title="Redo">↷</button>
+
+        <button id="insertImageBtn" title="Insert image">🖼️</button>
+        <button id="insertTableBtn" title="Insert table">▦</button>
+
+        <div class="small" style="display:flex;gap:6px;align-items:center;margin-left:6px">
+          <button id="zoomOutBtn" title="Zoom out">−</button>
+          <span id="zoomLabel">100%</span>
+          <button id="zoomInBtn" title="Zoom in">＋</button>
+        </div>
+
+        <label style="margin-left:8px"><input type="checkbox" id="autosaveToggle"> Autosave</label>
+        <button id="restoreAutoBtn" title="Restore autosave">Restore</button>
+
+        <label style="margin-left:8px"><input type="checkbox" id="spellToggle" checked> Spellcheck</label>
+      </div>
+
+      <div class="file-controls">
+        <input id="fileInput" type="file" accept=".docx,.doc,.html,.htm,.txt,.png,.jpg,.jpeg" style="display:none">
+        <input id="imgInput" type="file" accept="image/*" style="display:none">
+
+        <button id="openBtn">Open</button>
+        <button id="saveDocxBtn">Save .docx</button>
+        <button id="saveHtmlBtn">Save .html</button>
+        <button id="saveTxtBtn">Save .txt</button>
+        <button id="savePdfBtn" title="Print / Save as PDF">Print/PDF</button>
+
+        <button id="findBtn" title="Find/Replace">Find</button>
+        <span class="status" id="wordCount">Words: 0</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="editor" contenteditable="true" spellcheck="true" aria-label="Document editor">
+      <p>Start typing here... select text and use the toolbar to format.</p>
+    </div>
+  </main>
+
+  <div class="find-replace" id="findReplaceBox" role="dialog" aria-label="Find and replace">
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="findInput" placeholder="Find...">
+      <input id="replaceInput" placeholder="Replace...">
+      <button id="findNextBtn">Next</button>
+      <button id="replaceBtn">Replace</button>
+      <button id="replaceAllBtn">Replace All</button>
+      <button id="closeFindBtn">×</button>
+    </div>
   </div>
 
-  <div id="findReplacePanel">
-    Find: <input type="text" id="findText">
-    Replace: <input type="text" id="replaceText">
-    <button onclick="findNext()">Find Next</button>
-    <button onclick="replace()">Replace</button>
-    <button onclick="replaceAll()">Replace All</button>
-  </div>
+  <footer>
+    Files are handled locally in your browser. This page is offline-capable (Service Worker &amp; PWA manifest). First load: please open this page while online so the browser can cache required assets.
+  </footer>
 
-  <div id="editor" contenteditable="true" spellcheck="true"></div>
+  <!-- Libraries (will be cached on first load) -->
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <script src="https://unpkg.com/html-docx-js@0.4.1/dist/html-docx.js"></script>
 
-<script>
-  let zoomLevel=1, autosaveEnabled=false, autosaveTimer;
+  <script>
+    // ---------- Core editor logic ----------
+    const editor = document.getElementById('editor');
+    const AUTOKEY = 'mini_word_autosave_v2';
+    let autosaveInterval = null;
+    let zoom = 1;
 
-  function format(cmd,value=null){ document.execCommand(cmd,false,value); }
-  function undoEdit(){ document.execCommand('undo'); }
-  function redoEdit(){ document.execCommand('redo'); }
+    function exec(command, value=null){ document.execCommand(command, false, value); editor.focus(); updateActiveButtons(); updateWordCount(); }
 
-  function insertImage(){
-    let input=document.createElement('input'); input.type='file'; input.accept='image/*';
-    input.onchange=e=>{
-      let file=e.target.files[0]; let reader=new FileReader();
-      reader.onload=()=>{ format('insertImage',reader.result); };
+    // basic toolbar wiring
+    document.getElementById('boldBtn').onclick = ()=> exec('bold');
+    document.getElementById('italicBtn').onclick = ()=> exec('italic');
+    document.getElementById('underlineBtn').onclick = ()=> exec('underline');
+    document.getElementById('strikeBtn').onclick = ()=> exec('strikeThrough');
+    document.getElementById('olBtn').onclick = ()=> exec('insertOrderedList');
+    document.getElementById('ulBtn').onclick = ()=> exec('insertUnorderedList');
+    document.getElementById('leftBtn').onclick = ()=> exec('justifyLeft');
+    document.getElementById('centerBtn').onclick = ()=> exec('justifyCenter');
+    document.getElementById('rightBtn').onclick = ()=> exec('justifyRight');
+    document.getElementById('undoBtn').onclick = ()=> exec('undo');
+    document.getElementById('redoBtn').onclick = ()=> exec('redo');
+
+    document.getElementById('fontFamily').onchange = ()=> exec('fontName', document.getElementById('fontFamily').value);
+    document.getElementById('fontSize').onchange = ()=> wrapSelectionWithStyle({fontSize: document.getElementById('fontSize').value});
+    document.getElementById('textColor').onchange = (e)=> exec('foreColor', e.target.value);
+    document.getElementById('highlightColor').onchange = (e)=> exec('hiliteColor', e.target.value);
+
+    // Insert image (picker)
+    const imgInput = document.getElementById('imgInput');
+    document.getElementById('insertImageBtn').onclick = ()=> imgInput.click();
+    imgInput.onchange = async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{ exec('insertHTML', `<img src="${reader.result}" style="max-width:100%;display:block;margin:8px 0">`); };
       reader.readAsDataURL(file);
+      imgInput.value = '';
     };
-    input.click();
-  }
 
-  function insertTable(){
-    let r=prompt('Rows?'); let c=prompt('Cols?');
-    if(r&&c){
-      let html='<table border="1">';
-      for(let i=0;i<r;i++){ html+='<tr>'; for(let j=0;j<c;j++){ html+='<td>&nbsp;</td>'; } html+='</tr>'; }
-      html+='</table>';
-      document.execCommand('insertHTML',false,html);
+    // Insert table
+    document.getElementById('insertTableBtn').onclick = ()=>{
+      const r = parseInt(prompt('Rows', '2')); const c = parseInt(prompt('Cols', '2'));
+      if(!r||!c) return;
+      let html = '<table border="1" style="border-collapse:collapse;width:100%">';
+      for(let i=0;i<r;i++){ html += '<tr>'; for(let j=0;j<c;j++){ html += '<td>&nbsp;</td>'; } html += '</tr>'; }
+      html += '</table><p></p>';
+      exec('insertHTML', html);
+    };
+
+    // Zoom
+    function setZoom(v){ zoom = v; document.getElementById('zoomLabel').textContent = Math.round(zoom*100)+'%'; editor.style.zoom = zoom; }
+    document.getElementById('zoomInBtn').onclick = ()=> setZoom(Math.min(2, zoom+0.1));
+    document.getElementById('zoomOutBtn').onclick = ()=> setZoom(Math.max(0.5, zoom-0.1));
+
+    // Autosave
+    const autosaveToggle = document.getElementById('autosaveToggle');
+    document.getElementById('restoreAutoBtn').onclick = ()=>{
+      const data = localStorage.getItem(AUTOKEY); if(!data) return alert('No autosave found');
+      if(confirm('Restore autosaved content? This will replace current editor content.')){ editor.innerHTML = data; updateWordCount(); }
+    };
+    autosaveToggle.onchange = ()=>{
+      if(autosaveToggle.checked){
+        localStorage.setItem(AUTOKEY, editor.innerHTML);
+        autosaveInterval = setInterval(()=> localStorage.setItem(AUTOKEY, editor.innerHTML), 3000);
+        flashStatus('Autosave ON');
+      }else{ clearInterval(autosaveInterval); autosaveInterval = null; flashStatus('Autosave OFF'); }
+    };
+
+    // Find / Replace panel
+    const findBox = document.getElementById('findReplaceBox');
+    document.getElementById('findBtn').onclick = ()=> { findBox.style.display = findBox.style.display==='block' ? 'none' : 'block'; document.getElementById('findInput').focus(); };
+    document.getElementById('closeFindBtn').onclick = ()=> findBox.style.display='none';
+    document.getElementById('findNextBtn').onclick = ()=>{ const q = document.getElementById('findInput').value; if(!q) return; window.find(q, false, false, true, false, false, false); };
+    document.getElementById('replaceBtn').onclick = ()=>{
+      const q = document.getElementById('findInput').value; const r = document.getElementById('replaceInput').value; if(!q) return;
+      const sel = window.getSelection(); if(sel.rangeCount){ const text = sel.toString(); if(text===q){ exec('insertText', r); return; } }
+      const re = new RegExp(escapeRegExp(q)); editor.innerHTML = editor.innerHTML.replace(re, r); updateWordCount();
+    };
+    document.getElementById('replaceAllBtn').onclick = ()=>{
+      const q = document.getElementById('findInput').value; const r = document.getElementById('replaceInput').value; if(!q) return;
+      const re = new RegExp(escapeRegExp(q), 'g'); editor.innerHTML = editor.innerHTML.replace(re, r); updateWordCount();
+    };
+    function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'); }
+
+    // Open files
+    const fileInput = document.getElementById('fileInput');
+    document.getElementById('openBtn').onclick = ()=> fileInput.click();
+    fileInput.onchange = async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const name = file.name.toLowerCase();
+      if(name.endsWith('.docx')){
+        const arrayBuffer = await file.arrayBuffer();
+        try{ const result = await mammoth.convertToHtml({arrayBuffer}); editor.innerHTML = result.value; }catch(err){ alert('Error converting .docx: '+err.message); }
+      }else if(name.endsWith('.html')||name.endsWith('.htm')){
+        const text = await file.text(); editor.innerHTML = text;
+      }else if(name.match(/\.(png|jpg|jpeg)$/)){
+        const reader = new FileReader(); reader.onload = ()=> exec('insertHTML', `<img src="${reader.result}" style="max-width:100%;display:block;margin:8px 0">`); reader.readAsDataURL(file);
+      }else{
+        const text = await file.text(); editor.textContent = text;
+      }
+      fileInput.value = ''; updateWordCount();
+    };
+
+    // Save helpers
+    function download(blob, filename){ const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=> URL.revokeObjectURL(url), 10000); }
+    document.getElementById('saveHtmlBtn').onclick = ()=>{ const doc = `<!doctype html><html><head><meta charset=\"utf-8\"><title>Document</title></head><body>${editor.innerHTML}</body></html>`; const blob = new Blob([doc], {type:'text/html'}); download(blob, 'document.html'); }
+    document.getElementById('saveTxtBtn').onclick = ()=>{ const text = editor.innerText; const blob = new Blob([text], {type:'text/plain'}); download(blob, 'document.txt'); }
+    document.getElementById('saveDocxBtn').onclick = ()=>{ try{ const header = '<!doctype html><html><head><meta charset=\"utf-8\"><title>Document</title></head><body>'; const footer = '</body></html>'; const full = header + editor.innerHTML + footer; const converted = window.htmlDocx.asBlob(full, {orientation: 'portrait'}); download(converted, 'document.docx'); }catch(err){ alert('Export to .docx failed: '+err.message+'\\nYou can save as .html instead.'); } }
+    document.getElementById('savePdfBtn').onclick = ()=> window.print();
+
+    // Word count
+    function updateWordCount(){ const text = editor.innerText.trim().replace(/\\n+/g,' '); const words = text? text.split(/\\s+/).length : 0; document.getElementById('wordCount').textContent = `Words: ${words}`; }
+    editor.addEventListener('input', updateWordCount);
+
+    // Active buttons state
+    function updateActiveButtons(){ [['boldBtn','bold'],['italicBtn','italic'],['underlineBtn','underline']].forEach(([id,cmd])=>{ const el = document.getElementById(id); const state = document.queryCommandState(cmd); el.classList.toggle('active', state); }); }
+    editor.addEventListener('keyup', updateActiveButtons); editor.addEventListener('mouseup', updateActiveButtons);
+
+    // Paste cleanup (plain text by default)
+    editor.addEventListener('paste', function(e){ if((e.clipboardData||window.clipboardData).files && (e.clipboardData||window.clipboardData).files.length){ return; } e.preventDefault(); const text = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertHTML', false, text); });
+
+    // Drag & drop images
+    editor.addEventListener('dragover', e=> e.preventDefault());
+    editor.addEventListener('drop', e=>{ e.preventDefault(); const file = e.dataTransfer.files && e.dataTransfer.files[0]; if(file && file.type.startsWith('image/')){ const reader = new FileReader(); reader.onload = ()=> exec('insertHTML', `<img src="${reader.result}" style="max-width:100%;display:block;margin:8px 0">`); reader.readAsDataURL(file); } });
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', function(e){
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){ e.preventDefault(); document.getElementById('saveHtmlBtn').click(); flashStatus('Saved'); }
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='o'){ e.preventDefault(); document.getElementById('openBtn').click(); }
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='f'){ e.preventDefault(); document.getElementById('findBtn').click(); }
+    });
+
+    function flashStatus(msg){ const s = document.createElement('span'); s.textContent = msg; s.style.marginLeft='8px'; s.style.fontWeight='600'; document.querySelector('.file-controls').appendChild(s); setTimeout(()=> s.remove(), 1400); }
+
+    // Spellcheck toggle (checkbox created in toolbar)
+    document.getElementById('spellToggle')?.addEventListener?.('change', (e)=> editor.spellcheck = e.target.checked);
+
+    // Restore autosave on load & register service worker
+    window.addEventListener('load', ()=>{
+      const data = localStorage.getItem(AUTOKEY);
+      if(data && data.trim()){ if(confirm('Autosaved content found — restore it?')){ editor.innerHTML = data; } }
+      updateWordCount(); updateActiveButtons();
+      registerServiceWorkerAndManifest();
+    });
+
+    // helper for inline font-size wrapping
+    function wrapSelectionWithStyle(styleObj){
+      const sel = window.getSelection();
+      if(!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      if(range.collapsed) return;
+      const span = document.createElement('span');
+      span.style.cssText = Object.entries(styleObj).map(([k,v])=> `${k}:${v};`).join('');
+      try{
+        range.surroundContents(span);
+        sel.removeAllRanges();
+        const newRange = document.createRange();
+        newRange.selectNodeContents(span);
+        sel.addRange(newRange);
+      }catch(err){
+        exec('fontSize', '7');
+      }
     }
-  }
 
-  function zoom(f){ zoomLevel+=f; if(zoomLevel<0.2) zoomLevel=0.2; document.getElementById('editor').style.transform='scale('+zoomLevel+')'; document.getElementById('editor').style.transformOrigin='0 0'; }
+    // ---------- Offline support: dynamic SW + manifest ----------
+    async function registerServiceWorkerAndManifest(){
+      if(!('serviceWorker' in navigator)) return console.log('Service worker not supported');
 
-  function toggleFindReplace(){
-    let p=document.getElementById('findReplacePanel'); p.style.display=(p.style.display=='block'?'none':'block');
-  }
+      // assets to cache: include the page + libs we rely on
+      const assets = [
+        location.href,
+        location.pathname,
+        'https://unpkg.com/mammoth/mammoth.browser.min.js',
+        'https://unpkg.com/html-docx-js@0.4.1/dist/html-docx.js'
+      ];
 
-  function findNext(){
-    let text=document.getElementById('findText').value; if(!text) return;
-    let sel=window.getSelection(); let range=window.find(text,false,false,true,false,false,false);
-  }
-  function replace(){
-    let f=document.getElementById('findText').value, r=document.getElementById('replaceText').value;
-    if(document.getSelection().toString()==f){ document.execCommand('insertText',false,r); findNext(); }
-  }
-  function replaceAll(){
-    let f=document.getElementById('findText').value, r=document.getElementById('replaceText').value;
-    document.getElementById('editor').innerHTML=document.getElementById('editor').innerHTML.split(f).join(r);
-  }
+      // service worker code as a string (we'll create a blob URL and register it)
+      const swCode = `
+        const CACHE_NAME = 'mini-word-cache-v1';
+        const ASSETS = ${JSON.stringify(assets)};
+        self.addEventListener('install', event => {
+          event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).catch(err=>console.warn('Cache addAll failed',err)));
+          self.skipWaiting();
+        });
+        self.addEventListener('activate', event => { event.waitUntil(self.clients.claim()); });
+        self.addEventListener('fetch', event => {
+          event.respondWith(
+            caches.match(event.request).then(resp => {
+              if(resp) return resp;
+              return fetch(event.request).then(fetchResp => {
+                return caches.open(CACHE_NAME).then(cache => {
+                  try{ cache.put(event.request, fetchResp.clone()); }catch(e){ /* cross-origin opaque responses may throw */ }
+                  return fetchResp;
+                });
+              });
+            }).catch(()=> caches.match(ASSETS[0]))
+          );
+        });
+      `;
 
-  function toggleAutosave(){
-    autosaveEnabled=!autosaveEnabled;
-    if(autosaveEnabled){ autosaveTimer=setInterval(()=>localStorage.setItem('miniWordAutosave',document.getElementById('editor').innerHTML),3000); flashStatus('Autosave ON'); }
-    else { clearInterval(autosaveTimer); flashStatus('Autosave OFF'); }
-  }
-  function toggleSpellcheck(){
-    let e=document.getElementById('editor'); e.spellcheck=!e.spellcheck; flashStatus('Spellcheck '+(e.spellcheck?'ON':'OFF'));
-  }
+      try{
+        const swBlob = new Blob([swCode], {type:'application/javascript'});
+        const swUrl = URL.createObjectURL(swBlob);
+        await navigator.serviceWorker.register(swUrl, {scope: './'});
+        console.log('Service worker registered from blob URL');
+      }catch(err){
+        console.warn('Service worker registration failed:', err);
+      }
 
-  function wordCount(){
-    let text=document.getElementById('editor').innerText.trim();
-    let words=text?text.split(/\s+/).length:0;
-    let chars=text.length;
-    alert('Words: '+words+'\nCharacters: '+chars);
-  }
-
-  function printDoc(){
-    let w=window.open('','PRINT','height=600,width=800');
-    w.document.write('<html><head><title>Print</title></head><body>'+document.getElementById('editor').innerHTML+'</body></html>');
-    w.document.close(); w.focus(); w.print(); w.close();
-  }
-
-  document.getElementById('openFile').addEventListener('change',function(){
-    let file=this.files[0]; let reader=new FileReader();
-    if(file.name.endsWith('.txt')){ reader.onload=e=>document.getElementById('editor').innerText=e.target.result; reader.readAsText(file); }
-    else if(file.name.endsWith('.html')){ reader.onload=e=>document.getElementById('editor').innerHTML=e.target.result; reader.readAsText(file); }
-    else if(file.name.endsWith('.docx')){ reader.onload=e=>mammoth.extractRawText({arrayBuffer:e.target.result}).then(res=>document.getElementById('editor').innerText=res.value); reader.readAsArrayBuffer(file); }
-  });
-
-  function saveDoc(type){
-    let content=document.getElementById('editor').innerHTML;
-    if(type=='html'){ let blob=new Blob([content],{type:'text/html'}); saveAs(blob,'document.html'); }
-    else if(type=='txt'){ let blob=new Blob([document.getElementById('editor').innerText],{type:'text/plain'}); saveAs(blob,'document.txt'); }
-    else if(type=='docx'){ let converted=htmlDocx.asBlob(content); saveAs(converted,'document.docx'); }
-  }
-
-  function flashStatus(msg){ let s=document.getElementById('status'); s.innerText=msg; setTimeout(()=>s.innerText='',2000); }
-
-  // restore autosave
-  window.onload=()=>{ let saved=localStorage.getItem('miniWordAutosave'); if(saved&&confirm('Restore autosaved content?')) document.getElementById('editor').innerHTML=saved; };
-
-  // keyboard shortcuts
-  document.addEventListener('keydown',function(e){
-    if((e.ctrlKey||e.metaKey)&&e.key==='s'){ e.preventDefault(); saveDoc('html'); }
-    if((e.ctrlKey||e.metaKey)&&e.key==='o'){ e.preventDefault(); document.getElementById('openFile').click(); }
-    if((e.ctrlKey||e.metaKey)&&e.key==='f'){ e.preventDefault(); toggleFindReplace(); }
-  });
-</script>
+      // create a simple manifest (data-uri icon) and link it so browsers can prompt "Add to Home screen"
+      try{
+        const iconSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='192' height='192'><rect width='100%' height='100%' fill='%23ffffff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-size='72' fill='%232563eb'>W</text></svg>`;
+        const manifest = {
+          name: 'Mini Word', short_name: 'MiniWord', start_url: '.', display: 'standalone',
+          background_color: '#ffffff', theme_color: '#2563eb',
+          icons: [{ src: 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg), sizes: '192x192', type: 'image/svg+xml' }]
+        };
+        const manifestBlob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+        const manifestURL = URL.createObjectURL(manifestBlob);
+        let link = document.querySelector('link[rel=\"manifest\"]');
+        if(!link){ link = document.createElement('link'); link.rel = 'manifest'; document.head.appendChild(link); }
+        link.href = manifestURL;
+      }catch(err){ console.warn('Manifest creation failed', err); }
+    }
+  </script>
 </body>
 </html>
